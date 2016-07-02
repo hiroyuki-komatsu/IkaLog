@@ -25,8 +25,8 @@ import threading
 import wx
 import yaml
 
+import ikalog.outputs
 from ikalog.engine import *
-from ikalog import outputs
 from ikalog.ui.events import *
 from ikalog.ui.panel import *
 from ikalog.ui import VideoCapture
@@ -179,6 +179,51 @@ class IkaLogGUI(object):
         self.engine_thread.daemon = True
         self.engine_thread.start()
 
+    def init_outputs(self, outputs):
+        output_dict = {}
+        for output in outputs:
+            output_dict[output.__class__] = output
+
+        misc_keys = [
+            ikalog.outputs.CSV,
+            ikalog.outputs.JSON,
+            ikalog.outputs.WebSocketServer,
+            ikalog.outputs.DebugVideoWriter,
+        ]
+        keys = [ikalog.outputs.StatInk, ikalog.outputs.Twitter]
+        for key in output_dict.keys():
+            if key in misc_keys:
+                continue
+            if key not in keys:
+                keys.append(key)
+
+        index = 1
+        for key in keys:
+            output = output_dict.get(key)
+            if not output:
+                continue
+
+            output.on_option_tab_create(self.options.notebookOptions)
+            self.options.notebookOptions.InsertPage(
+                index, output.panel, output.panel_name)
+            index += 1
+
+        self.misc_panel = wx.Panel(
+            self.options.notebookOptions, wx.ID_ANY, size=(640, 360))
+        self.misc_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        for key in misc_keys:
+            output = output_dict.get(key)
+            if not output:
+                continue
+
+            output.on_option_tab_create(self.misc_panel)
+            self.misc_panel_sizer.Add(
+                output.panel, flag=wx.EXPAND | wx.ALL, border=10)
+        self.misc_panel.SetSizer(self.misc_panel_sizer)
+        self.options.notebookOptions.InsertPage(
+            index, self.misc_panel, 'misc')
+
+
     def __init__(self, capture):
         self.capture = capture
         self.frame = wx.Frame(None, wx.ID_ANY, "IkaLog GUI", size=(700, 500))
@@ -196,6 +241,8 @@ class IkaLogGUI(object):
         self.options = OptionsPanel(self.frame)
 
         self.capture.on_option_tab_create(self.options.notebookOptions)
+        self.options.notebookOptions.InsertPage(
+            0, capture.panel, capture.panel_name)
         self.capture.panel.Bind(EVT_INPUT_INITIALIZED,
                                 self.on_input_initialized)
 
